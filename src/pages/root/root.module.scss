@@ -1,0 +1,35 @@
+.root {
+  text-align: center;
+  min-height: 100vh;
+  color: white;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.rootInner {
+  padding: 48px;
+}
+
+.mainComponentWrapper {
+  margin-bottom: 80px;
+}
+
+.announcement {
+  width: 100%;
+  display: block;
+  background-color: #1b202f;
+  border-bottom: 1px solid #2e3241;
+  text-align: center;
+  color: #234ef5;
+  font-size: 1;
+  font-weight: normal;
+}
+
+.announcement a {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  display: block;
+  color: #a7b9ff;
+  font-weight: normal;
+  text-decoration: none;
+}
