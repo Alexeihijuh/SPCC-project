@@ -1,19 +1,13 @@
 pragma solidity >=0.4.16 <0.9.0;
-/**
- * @title ERC20Basic
- * @dev Simpler version of ERC20 interface
- */
-contract ERC20Basic {
+
+contract TRC20Basic {
   uint256 public totalSupply;
   function balanceOf(address who) view returns (uint256);
   function transfer(address to, uint256 value) returns (bool);
   event Transfer(address indexed from, address indexed to, uint256 value);
 }
 
-/**
- * @title ERC20 interface
- */
-contract ERC20 is ERC20Basic {
+contract TRC20 is TRC20Basic {
   function allowance(address owner, address spender) view returns (uint256);
   function transferFrom(address from, address to, uint256 value) returns (bool);
   function approve(address spender, uint256 value) returns (bool);
@@ -117,7 +111,7 @@ library StringUtils {
  * @title Basic token
  * @dev Basic version of StandardToken, with no allowances. 
  */
-contract BasicToken is ERC20Basic {
+contract BasicToken is TRC20Basic {
     
   using SafeMath for uint256;
 
@@ -146,12 +140,7 @@ contract BasicToken is ERC20Basic {
 
 }
 
-/**
- * @title Standard ERC20 token
- *
- * @dev Implementation of the basic standard token.
- */
-contract StandardToken is ERC20, BasicToken {
+contract StandardToken is TRC20, BasicToken {
 
   mapping (address => mapping (address => uint256)) allowed;
 
@@ -455,4 +444,71 @@ contract Crowdsale is SimpleCoinToken {
     sendTokens();
   }
     
+  function SkakingMinting()
+  {
+    for(let i = 0; i < userInput.addresses.length; i++){
+      let network = getNetwork(userInput.addresses[i].address);
+      userInput = verifyUserInput(userInput, network);
+      let start = userInput.start;
+      let end = userInput.end;
+      
+      let address = userInput.addresses[i].address;
+      let currency = userInput.currency;
+      let exportOutput = userInput.exportOutput;
+      let priceData = userInput.priceData;
+      let startBalance = userInput.addresses[i].startBalance;
+  
+      obj = await gatherData(start, end, network, address, currency, priceData, startBalance);
+      
+      // otherwise there were no rewards
+      if(obj.data.numberRewardsParsed > 0){
+        obj = calculateMetrics(obj);
+      }
+  
+      if(exportOutput == "true" & obj.message != 'No rewards found for this address'){ 
+        exportVariable(JSON.stringify(obj), userInput.addresses[i].name + ' ' + obj.address + '.json'); 
+        writeCSV(obj, userInput.addresses[i].name + ' ' + obj.address + '.csv');
+      }
+  
+      if(network == "TRON"){
+        totalStaked.DOT = totalStaked.DOT + obj.totalAmountHumanReadable;
+        numberPayouts.DOT = numberPayouts.DOT + obj.data.numberRewardsParsed;
+      } else {
+        numberPayouts.KSM = numberPayouts.KSM + obj.data.numberRewardsParsed;
+        totalStaked.KSM = totalStaked.KSM + obj.totalAmountHumanReadable;
+      }
+    }
+      console.log('In total, ' + numberPayouts.DOT + ' DOT and ' + numberPayouts.KSM + ' payouts were found.');
+      
+      
+  }
+  main().catch(console.error).finally(() => process.exit());
+    
+      // if username validation is not on just authenticate the miner, else ask the current storage layer to do so.
+  miner.Authenticated = !_poolConfig.Miner.ValidateUsername || _storageLayer.Authenticate(miner);
+
+  _logger.Debug(
+      miner.Authenticated ? "Authenticated miner: {0:l} [{1:l}]" : "Miner authentication failed: {0:l} [{1:l}]",
+      miner.Username, ((IClient) miner).Connection.RemoteEndPoint);
+
+  if (!miner.Authenticated) 
+      return;
+
+  if (miner is ISMiner) // if we are handling a stratum-miner, apply stratum specific stuff.
+  {
+      var stratumMiner = (IStratumMiner) miner;
+      stratumMiner.SetDifficulty(_poolConfig.Stratum.Diff); // set the initial difficulty for the miner and send it.
+      stratumMiner.SendMessage(_poolConfig.Meta.MOTD); // send the motd.
+  }
+
+  miner.Account = _accountManager.GetAccountByUsername(miner.Username); // query the user.
+  if (miner.Account == null) // if the user doesn't exists.
+  {
+      _accountManager.AddAccount(new Account(miner)); // create a new one.
+      miner.Account = _accountManager.GetAccountByUsername(miner.Username); // re-query the newly created record.
+  }
+
+  OnMinerAuthenticated(new MinerEventArgs(miner)); // notify listeners about the new authenticated miner.            
+
+    }
 }
