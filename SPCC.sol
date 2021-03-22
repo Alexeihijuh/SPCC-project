@@ -1,514 +1,152 @@
-pragma solidity >=0.4.16 <0.9.0;
+pragma solidity ^0.4.16;
+interface tokenRecipient { function receiveApproval(address _from, uint256 _value, address _token, bytes _extraData) external; }
 
-contract TRC20Basic {
-  uint256 public totalSupply;
-  function balanceOf(address who) view returns (uint256);
-  function transfer(address to, uint256 value) returns (bool);
-  event Transfer(address indexed from, address indexed to, uint256 value);
-}
+contract TokenTRC20 {
+    // Public variables of the token
+    string public name;
+    string public symbol;
+    uint8 public decimals = 18;
+    // 18 decimals is the strongly suggested default, avoid changing it
+    uint256 public totalSupply;
 
-contract TRC20 is TRC20Basic {
-  function allowance(address owner, address spender) view returns (uint256);
-  function transferFrom(address from, address to, uint256 value) returns (bool);
-  function approve(address spender, uint256 value) returns (bool);
-  event Approval(address indexed owner, address indexed spender, uint256 value);
-}
+    // This creates an array with all balances
+    mapping (address => uint256) public balanceOf;
+    mapping (address => mapping (address => uint256)) public allowance;
 
-/**
- * @title SafeMath
- * @dev Math operations with safety checks that throw on error
- */
-library SafeMath {
-    
-  function mul(uint256 a, uint256 b) internal view returns (uint256) {
-    uint256 c = a * b;
-    assert(a == 0 || c / a == b);
-    return c;
-  }
+    // This generates a public event on the blockchain that will notify clients
+    event Transfer(address indexed from, address indexed to, uint256 value);
 
-  function div(uint256 a, uint256 b) internal view returns (uint256) {
-    // assert(b > 0); // Solidity automatically throws when dividing by 0
-    uint256 c = a / b;
-    // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-    return c;
-  }
+    // This notifies clients about the amount burnt
+    event Burn(address indexed from, uint256 value);
 
-  function sub(uint256 a, uint256 b) internal view returns (uint256) {
-    assert(b <= a);
-    return a - b;
-  }
-
-  function add(uint256 a, uint256 b) internal view returns (uint256) {
-    uint256 c = a + b;
-    assert(c >= a);
-    return c;
-  }
-  
-  function per(uint256 a, uint256 b) internal view returns (uint256) {
-      uint256 c = a * b / 100;
-      return c;
-  }
-  
-}
-
-library StringUtils {
-    /// @dev Does a byte-by-byte lexicographical comparison of two strings.
-    /// @return a negative number if `_a` is smaller, zero if they are equal
-    /// and a positive numbe if `_b` is smaller.
-    function compare(string _a, string _b) returns (int) {
-        bytes memory a = bytes(_a);
-        bytes memory b = bytes(_b);
-        uint minLength = a.length;
-        if (b.length < minLength) minLength = b.length;
-        //@todo unroll the loop into increments of 32 and do full 32 byte comparisons
-        for (uint i = 0; i < minLength; i ++)
-            if (a[i] < b[i])
-                return -1;
-            else if (a[i] > b[i])
-                return 1;
-        if (a.length < b.length)
-            return -1;
-        else if (a.length > b.length)
-            return 1;
-        else
-            return 0;
+    /**
+     * Constructor function
+     *
+     * Initializes contract with initial supply tokens to the creator of the contract
+     */
+    function TokenTRC20(
+        uint256 initialSupply,
+        string tokenName,
+        string tokenSymbol
+    ) public {
+        totalSupply = initialSupply * 10 ** uint256(decimals);  // Update total supply with the decimal amount
+        balanceOf[msg.sender] = totalSupply;                // Give the creator all initial tokens
+        name = tokenName;                                   // Set the name for display purposes
+        symbol = tokenSymbol;                               // Set the symbol for display purposes
     }
-    /// @dev Compares two strings and returns true iff they are equal.
-    function equal(string _a, string _b) returns (bool) {
-        return compare(_a, _b) == 0;
+
+    /**
+     * Internal transfer, only can be called by this contract
+     */
+    function _transfer(address _from, address _to, uint _value) internal {
+        // Prevent transfer to 0x0 address. Use burn() instead
+        require(_to != 0x0);
+        // Check if the sender has enough
+        require(balanceOf[_from] >= _value);
+        // Check for overflows
+        require(balanceOf[_to] + _value >= balanceOf[_to]);
+        // Save this for an assertion in the future
+        uint previousBalances = balanceOf[_from] + balanceOf[_to];
+        // Subtract from the sender
+        balanceOf[_from] -= _value;
+        // Add the same to the recipient
+        balanceOf[_to] += _value;
+        emit Transfer(_from, _to, _value);
+        // Asserts are used to use static analysis to find bugs in your code. They should never fail
+        assert(balanceOf[_from] + balanceOf[_to] == previousBalances);
     }
-    /// @dev Finds the index of the first occurrence of _needle in _haystack
-    function indexOf(string _haystack, string _needle) returns (int)
-    {
-    	bytes memory h = bytes(_haystack);
-    	bytes memory n = bytes(_needle);
-    	if(h.length < 1 || n.length < 1 || (n.length > h.length)) 
-    		return -1;
-    	else if(h.length > (2**128 -1)) // since we have to be able to return -1 (if the char isn't found or input error), this function must return an "int" type with a max length of (2^128 - 1)
-    		return -1;									
-    	else
-    	{
-    		uint subindex = 0;
-    		for (uint i = 0; i < h.length; i ++)
-    		{
-    			if (h[i] == n[0]) // found the first char of b
-    			{
-    				subindex = 1;
-    				while(subindex < n.length && (i + subindex) < h.length && h[i + subindex] == n[subindex]) // search until the chars don't match or until we reach the end of a or b
-    				{
-    					subindex++;
-    				}	
-    				if(subindex == n.length)
-    					return int(i);
-    			}
-    		}
-    		return -1;
-    	}	
+
+    /**
+     * Transfer tokens
+     *
+     * Send `_value` tokens to `_to` from your account
+     *
+     * @param _to The address of the recipient
+     * @param _value the amount to send
+     */
+    function transfer(address _to, uint256 _value) public {
+        _transfer(msg.sender, _to, _value);
     }
-}
 
-/**
- * @title Basic token
- * @dev Basic version of StandardToken, with no allowances. 
- */
-contract BasicToken is TRC20Basic {
-    
-  using SafeMath for uint256;
-
-  mapping(address => uint256) balances;
-
-  /**
-  * @dev transfer token for a specified address
-  * @param _to The address to transfer to.
-  * @param _value The amount to be transferred.
-  */
-  function transfer(address _to, uint256 _value) returns (bool) {
-    balances[msg.sender] = balances[msg.sender].sub(_value);
-    balances[_to] = balances[_to].add(_value);
-    Transfer(msg.sender, _to, _value);
-    return true;
-  }
-
-  /**
-  * @dev Gets the balance of the specified address.
-  * @param _owner The address to query the the balance of. 
-  * @return An uint256 representing the amount owned by the passed address.
-  */
-  function balanceOf(address _owner) view returns (uint256 balance) {
-    return balances[_owner];
-  }
-
-}
-
-contract StandardToken is TRC20, BasicToken {
-
-  mapping (address => mapping (address => uint256)) allowed;
-
-  /**
-   * @dev Transfer tokens from one address to another
-   * @param _from address The address which you want to send tokens from
-   * @param _to address The address which you want to transfer to
-   * @param _value uint256 the amout of tokens to be transfered
-   */
-  function transferFrom(address _from, address _to, uint256 _value) returns (bool) {
-    var _allowance = allowed[_from][msg.sender];
-
-    // Check is not needed because sub(_allowance, _value) will already throw if this condition is not met
-    // require (_value <= _allowance);
-
-    balances[_to] = balances[_to].add(_value);
-    balances[_from] = balances[_from].sub(_value);
-    allowed[_from][msg.sender] = _allowance.sub(_value);
-    Transfer(_from, _to, _value);
-    return true;
-  }
-
-  /**
-   * @dev Aprove the passed address to spend the specified amount of tokens on behalf of msg.sender.
-   * @param _spender The address which will spend the funds.
-   * @param _value The amount of tokens to be spent.
-   */
-  function approve(address _spender, uint256 _value) returns (bool) {
-
-    // To change the approve amount you first have to reduce the addresses`
-    //  allowance to zero by calling `approve(_spender, 0)` if it is not
-    //  already 0 to mitigate the race condition described here:
-    require((_value == 0) || (allowed[msg.sender][_spender] == 0));
-
-    allowed[msg.sender][_spender] = _value;
-    Approval(msg.sender, _spender, _value);
-    return true;
-  }
-
-  /**
-   * @dev Function to check the amount of tokens that an owner allowed to a spender.
-   * @param _owner address The address which owns the funds.
-   * @param _spender address The address which will spend the funds.
-   * @return A uint256 specifing the amount of tokens still available for the spender.
-   */
-  function allowance(address _owner, address _spender) view returns (uint256 remaining) {
-    return allowed[_owner][_spender];
-  }
-
-}
-
-/**
- * @title Ownable
- * @dev The Ownable contract has an owner address, and provides basic authorization control
- * functions, this simplifies the implementation of "user permissions".
- */
-contract Ownable {
-    
-  address public owner;
-
-  /**
-   * @dev The Ownable constructor sets the original `owner` of the contract to the sender
-   * account.
-   */
-  function Ownable() {
-    owner = msg.sender;
-  }
-
-  /**
-   * @dev Throws if called by any account other than the owner.
-   */
-  modifier onlyOwner() {
-    require(msg.sender == owner);
-    _;
-  }
-
-  /**
-   * @dev Allows the current owner to transfer control of the contract to a newOwner.
-   * @param newOwner The address to transfer ownership to.
-   */
-  function transferOwnership(address newOwner) onlyOwner {
-    require(newOwner != address(0));      
-    owner = newOwner;
-  }
-
-}
-
-/**
- * @title Burnable Token
- * @dev Token that can be irreversibly burned (destroyed).
- */
-contract BurnableToken is StandardToken, Ownable {
-
-  /**
-   * @dev Burns a specific amount of tokens.
-   * @param _value The amount of token to be burned.
-   */
-  function burn(uint _value) public onlyOwner {
-    require(_value > 0);
-    address burner = msg.sender;
-    balances[burner] = balances[burner].sub(_value);
-    totalSupply = totalSupply.sub(_value);
-    Burn(burner, _value);
-  }
-
-  event Burn(address indexed burner, uint indexed value);
-
-}
-
-contract SimpleCoinToken is BurnableToken {
-    
-  string public constant name = "SpreadCap Coin";
-   
-  string public constant symbol = "CC";
-    
-  uint32 public constant decimals = 0;
-
-  uint256 public INITIAL_SUPPLY = 100000000;
-
-  function SimpleCoinToken() {
-    totalSupply = INITIAL_SUPPLY;
-    balances[msg.sender] = INITIAL_SUPPLY;
-  }
-  
-}
-
-contract Crowdsale is SimpleCoinToken {
-    
-  using SafeMath for uint;
-  
-  using StringUtils for string;
-  
-  address multisig;
-
-  uint restrictedPercent;
-
-  address restricted;
-
-  uint startSale;
-  
-  uint startPreSale;
-  
-  uint discount;
-  
-  string currentStage;
-    
-  uint period;
-
-  uint price;
-  
-  uint totalBountyTokens;
-  
-  uint distributedBountyTokens;
-  
-  uint minTransaction;
-  
-  uint maxTransaction;
-  
-  bool finishSaleToken;
-  
-  function Crowdsale() {
-    multisig = 0x0DC7974A0F92c56dc0aB6eFd478Df5E9442b3ac9;
-    restricted = 0xaAa25E5a459154FAcd6b9011aE599D5E26273d46;
-    restrictedPercent = 8;
-    price = 2500;
-    startSale = 1529631600;
-    startPreSale = 1529625600;
-    period = 30;
-    totalBountyTokens = 3000000;
-    minTransaction = 0;
-    maxTransaction = 50;
-    currentStage = "PreSale";
-    discount = 15;
-    finishSaleToken = false;
-    
-    restrictedTokens();
-    setCurrentStage();
-  }
-  
-  function getStage() public returns (string) {
-      setCurrentStage();
-      return currentStage;
-  }
-  
-  function setStartSale(uint newStartSale) onlyOwner updateCurrentStage {
-    startSale = newStartSale;
-  }
-  
-  
-  function setStartPreSale(uint newStartPreSale) onlyOwner updateCurrentStage {
-    startPreSale = newStartPreSale;
-  }
-  
-  function setMinTransaction(uint newMinTransaction) onlyOwner {
-    minTransaction = newMinTransaction;
-  }
-  
-   function setMaxTransaction(uint newMaxTransaction) onlyOwner {
-    maxTransaction = newMaxTransaction;
-  }
-  
-  function setPrice(uint newPrice) onlyOwner {
-    price = newPrice;
-  }
-  
-  function setDiscount(uint newDiscount) onlyOwner {
-    discount = newDiscount;
-  }
-  
-  function setPeriod(uint newPeriod) onlyOwner {
-    period = newPeriod;
-  }
-  
-  function setCurrentStage() public {
-    if (now > startPreSale && now < startPreSale + period * 1 days) {
-        currentStage = "PreSale";
-    } else if (now > startSale && now < startSale + period * 1 days) {
-        currentStage = "Sale";
-    } else {
-        currentStage = "";
+    /**
+     * Transfer tokens from other address
+     *
+     * Send `_value` tokens to `_to` on behalf of `_from`
+     *
+     * @param _from The address of the sender
+     * @param _to The address of the recipient
+     * @param _value the amount to send
+     */
+    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
+        require(_value <= allowance[_from][msg.sender]);     // Check allowance
+        allowance[_from][msg.sender] -= _value;
+        _transfer(_from, _to, _value);
+        return true;
     }
-  }
-  
-  modifier updateCurrentStage() {
-    setCurrentStage();
-    _;
-  }
 
-  modifier preSaleOrSaleIsOn() {
-    require(currentStage.equal("PreSale") || currentStage.equal("Sale"));
-    _;
-  }
-  
-  modifier checkFinishSale() {
-    require(finishSaleToken != true);
-    _;
-  }
-  
-  modifier isUnderBuyTokens() {
-    require(balances[owner] > totalBountyTokens);
-    _;
-  }
-  
-  function restrictedTokens() private onlyOwner {
-    uint restrictedTokens = totalSupply.mul(restrictedPercent).div(100);
-    transfer(restricted, restrictedTokens);
-  }
-  
-  function bytesToAddress(bytes source) internal view returns(address parsedReferer) {
-    assembly {
-      parsedReferer := mload(add(source,0x14))
+    /**
+     * Set allowance for other address
+     *
+     * Allows `_spender` to spend no more than `_value` tokens on your behalf
+     *
+     * @param _spender The address authorized to spend
+     * @param _value the max amount they can spend
+     */
+    function approve(address _spender, uint256 _value) public
+        returns (bool success) {
+        allowance[msg.sender][_spender] = _value;
+        return true;
     }
-    return parsedReferer;
-  }
-  
-  function transferSaleToken(address _to, uint256 _value) private returns (bool) {
-    balances[owner] = balances[owner].sub(_value);
-    balances[_to] = balances[_to].add(_value);
-    Transfer(owner, _to, _value);
-    return true;
-  }
 
-  function sendTokens() payable isUnderBuyTokens preSaleOrSaleIsOn checkFinishSale {
-    uint comeEth = msg.value.div(1); //(1 ether)                                                       ********
-    multisig.transfer(msg.value);
-    uint tokens;
-    
-    if (currentStage.equal("PreSale")) {
-        require(comeEth >= minTransaction && comeEth <= maxTransaction);
-        uint priceSale = price.mul(100 + discount).div(100);
-        tokens = priceSale.mul(msg.value).div(1); //(1 ether)                                          *********
-    } else {
-        require(comeEth >= minTransaction);
-        tokens = price.mul(msg.value).div(1); //(1 ether)                                              *********
+    /**
+     * Set allowance for other address and notify
+     *
+     * Allows `_spender` to spend no more than `_value` tokens on your behalf, and then ping the contract about it
+     *
+     * @param _spender The address authorized to spend
+     * @param _value the max amount they can spend
+     * @param _extraData some extra information to send to the approved contract
+     */
+    function approveAndCall(address _spender, uint256 _value, bytes _extraData)
+        public
+        returns (bool success) {
+        tokenRecipient spender = tokenRecipient(_spender);
+        if (approve(_spender, _value)) {
+            spender.receiveApproval(msg.sender, _value, this, _extraData);
+            return true;
+        }
     }
-    
-    transferSaleToken(msg.sender, tokens);
-    
-    if(msg.data.length == 20) {
-      require(distributedBountyTokens < totalBountyTokens);
-      address referer = bytesToAddress(bytes(msg.data));
-      require(referer != msg.sender);
-      distributedBountyTokens += 250;
-      transfer(referer, 250);
-      distributedBountyTokens += 250;
-      transfer(msg.sender, 250);
+
+    /**
+     * Destroy tokens
+     *
+     * Remove `_value` tokens from the system irreversibly
+     *
+     * @param _value the amount of money to burn
+     */
+    function burn(uint256 _value) public returns (bool success) {
+        require(balanceOf[msg.sender] >= _value);   // Check if the sender has enough
+        balanceOf[msg.sender] -= _value;            // Subtract from the sender
+        totalSupply -= _value;                      // Updates totalSupply
+        emit Burn(msg.sender, _value);
+        return true;
     }
-  }
-  
-  function finishSale() onlyOwner {
-      uint bountyToken =  totalBountyTokens.sub(distributedBountyTokens);
-      
-      if (bountyToken > 0) {
-          transfer(restricted, bountyToken);
-      }
-      
-      burn(balances[msg.sender]);
-  }
 
-  function() external isUnderBuyTokens payable {
-    sendTokens();
-  }
-    
-  function SkakingMinting()
-  {
-    for(let i = 0; i < userInput.addresses.length; i++){
-      let network = getNetwork(userInput.addresses[i].address);
-      userInput = verifyUserInput(userInput, network);
-      let start = userInput.start;
-      let end = userInput.end;
-      
-      let address = userInput.addresses[i].address;
-      let currency = userInput.currency;
-      let exportOutput = userInput.exportOutput;
-      let priceData = userInput.priceData;
-      let startBalance = userInput.addresses[i].startBalance;
-  
-      obj = await gatherData(start, end, network, address, currency, priceData, startBalance);
-      
-      // otherwise there were no rewards
-      if(obj.data.numberRewardsParsed > 0){
-        obj = calculateMetrics(obj);
-      }
-  
-      if(exportOutput == "true" & obj.message != 'No rewards found for this address'){ 
-        exportVariable(JSON.stringify(obj), userInput.addresses[i].name + ' ' + obj.address + '.json'); 
-        writeCSV(obj, userInput.addresses[i].name + ' ' + obj.address + '.csv');
-      }
-  
-      if(network == "TRON"){
-        totalStaked.DOT = totalStaked.DOT + obj.totalAmountHumanReadable;
-        numberPayouts.DOT = numberPayouts.DOT + obj.data.numberRewardsParsed;
-      } else {
-        numberPayouts.KSM = numberPayouts.KSM + obj.data.numberRewardsParsed;
-        totalStaked.KSM = totalStaked.KSM + obj.totalAmountHumanReadable;
-      }
-    }
-      console.log('In total, ' + numberPayouts.DOT + ' DOT and ' + numberPayouts.KSM + ' payouts were found.');
-      
-      
-  }
-  main().catch(console.error).finally(() => process.exit());
-    
-      // if username validation is not on just authenticate the miner, else ask the current storage layer to do so.
-  miner.Authenticated = !_poolConfig.Miner.ValidateUsername || _storageLayer.Authenticate(miner);
-
-  _logger.Debug(
-      miner.Authenticated ? "Authenticated miner: {0:l} [{1:l}]" : "Miner authentication failed: {0:l} [{1:l}]",
-      miner.Username, ((IClient) miner).Connection.RemoteEndPoint);
-
-  if (!miner.Authenticated) 
-      return;
-
-  if (miner is ISMiner) // if we are handling a stratum-miner, apply stratum specific stuff.
-  {
-      var stratumMiner = (IStratumMiner) miner;
-      stratumMiner.SetDifficulty(_poolConfig.Stratum.Diff); // set the initial difficulty for the miner and send it.
-      stratumMiner.SendMessage(_poolConfig.Meta.MOTD); // send the motd.
-  }
-
-  miner.Account = _accountManager.GetAccountByUsername(miner.Username); // query the user.
-  if (miner.Account == null) // if the user doesn't exists.
-  {
-      _accountManager.AddAccount(new Account(miner)); // create a new one.
-      miner.Account = _accountManager.GetAccountByUsername(miner.Username); // re-query the newly created record.
-  }
-
-  OnMinerAuthenticated(new MinerEventArgs(miner)); // notify listeners about the new authenticated miner.            
-
+    /**
+     * Destroy tokens from other account
+     *
+     * Remove `_value` tokens from the system irreversibly on behalf of `_from`.
+     *
+     * @param _from the address of the sender
+     * @param _value the amount of money to burn
+     */
+    function burnFrom(address _from, uint256 _value) public returns (bool success) {
+        require(balanceOf[_from] >= _value);                // Check if the targeted balance is enough
+        require(_value <= allowance[_from][msg.sender]);    // Check allowance
+        balanceOf[_from] -= _value;                         // Subtract from the targeted balance
+        allowance[_from][msg.sender] -= _value;             // Subtract from the sender's allowance
+        totalSupply -= _value;                              // Update totalSupply
+        emit Burn(_from, _value);
+        return true;
     }
 }
